@@ -17,8 +17,8 @@ const auth = getAuth(app);
 const db = getFirestore(app);
 
 const FAMILY_MEMBERS = [
-    " التجاني",
-    " تهاني",
+    "الوالد التجاني",
+    "الوالدة تهاني",
     "أحمد",
     "السر",
     "أسامة",
@@ -27,8 +27,8 @@ const FAMILY_MEMBERS = [
 ];
 
 const MEMBER_EMAILS = {
-    " التجاني": "eltijani@family.com",
-    " تهاني": "tahani@family.com",
+    "الوالد التجاني": "eltijani@family.com",
+    "الوالدة تهاني": "tahani@family.com",
     "أحمد": "ahmed@family.com",
     "السر": "elssier@family.com",
     "أسامة": "osama@family.com",
@@ -37,8 +37,8 @@ const MEMBER_EMAILS = {
 
 let tasks = [];
 let familyScores = {
-    " التجاني": 0,
-    " تهاني": 0,
+    "الوالد التجاني": 0,
+    "الوالدة تهاني": 0,
     "أحمد": 0,
     "السر": 0,
     "أسامة": 0,
