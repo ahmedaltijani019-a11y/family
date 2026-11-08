@@ -1,6 +1,3 @@
-// ======================================
-// 1. إعدادات Firebase والمكتبات السحابية
-// ======================================
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
 import { getAuth, signInWithEmailAndPassword, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
 import { getFirestore, collection, addDoc, getDocs, updateDoc, doc, deleteDoc, onSnapshot, setDoc, getDoc } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
@@ -19,7 +16,6 @@ const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 const db = getFirestore(app);
 
-// الأسماء الصريحة فقط دون ألقاب عائلية
 const FAMILY_MEMBERS = [
     "أحمد",
     "السر",
