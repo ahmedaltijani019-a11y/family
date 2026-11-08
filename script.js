@@ -1,10 +1,24 @@
-// ======================================
-// 1. إعدادات الموقع والبيانات (الأعضاء الستة والعائلة)
-// ======================================
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
+import { getAuth, signInWithEmailAndPassword, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
+import { getFirestore, collection, addDoc, updateDoc, doc, deleteDoc, onSnapshot, setDoc } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
+
+const firebaseConfig = {
+    apiKey: "AIzaSyDeuWVOzOs784lretb6GVByMspAY4EzN_k",
+    authDomain: "family-b2c75.firebaseapp.com",
+    projectId: "family-b2c75",
+    storageBucket: "family-b2c75.firebasestorage.app",
+    messagingSenderId: "321218921724",
+    appId: "1:321218921724:web:85ffd3453b60ca6c798379",
+    measurementId: "G-XJ38GSJBDE"
+};
+
+const app = initializeApp(firebaseConfig);
+const auth = getAuth(app);
+const db = getFirestore(app);
 
 const FAMILY_MEMBERS = [
-    "الوالد التجاني",
-    "الوالدة تهاني",
+    " التجاني",
+    " تهاني",
     "أحمد",
     "السر",
     "أسامة",
@@ -12,99 +26,127 @@ const FAMILY_MEMBERS = [
     "العائلة"
 ];
 
-const STORAGE_KEYS = {
-    tasks: "familyTasks",
-    scores: "familyScores",
-    theme: "familyTheme"
+const MEMBER_EMAILS = {
+    " التجاني": "eltijani@family.com",
+    " تهاني": "tahani@family.com",
+    "أحمد": "ahmed@family.com",
+    "السر": "elssier@family.com",
+    "أسامة": "osama@family.com",
+    "محمد": "mohamed@family.com"
 };
 
-function readStorage(key, fallback) {
-    try {
-        const value = localStorage.getItem(key);
-        return value ? JSON.parse(value) : fallback;
-    } catch (error) {
-        console.error("Storage read error:", error);
-        return fallback;
-    }
-}
-
-function saveStorage(key, value) {
-    try {
-        localStorage.setItem(key, JSON.stringify(value));
-    } catch (error) {
-        console.error("Storage save error:", error);
-        alert("تعذر حفظ البيانات. تحقق من مساحة التخزين في المتصفح.");
-    }
-}
-
-function createId() {
-    if (crypto.randomUUID) {
-        return crypto.randomUUID();
-    }
-
-    return Date.now().toString(36) +
-        Math.random().toString(36).slice(2);
-}
-
-// تحميل المهام القديمة مع دعم البيانات السابقة
-let tasks = readStorage(STORAGE_KEYS.tasks, []);
-
-if (!Array.isArray(tasks)) {
-    tasks = [];
-}
-
-tasks = tasks.map(task => ({
-    id: task.id || createId(),
-    text: String(task.text || ""),
-    category: task.category || "📌 أخرى",
-    user: FAMILY_MEMBERS.includes(task.user) ? task.user : "العائلة",
-    completed: Boolean(task.completed)
-})).filter(task => task.text);
-
-saveStorage(STORAGE_KEYS.tasks, tasks);
-
-// تحميل النقاط القديمة والمحافظة عليها
-let familyScores = readStorage(STORAGE_KEYS.scores, {});
-
-if (!familyScores || typeof familyScores !== "object" || Array.isArray(familyScores)) {
-    familyScores = {};
-}
-
-FAMILY_MEMBERS.forEach(user => {
-    const score = Number(familyScores[user]);
-    familyScores[user] = Number.isFinite(score)
-        ? Math.max(0, score)
-        : 0;
-});
-
-saveStorage(STORAGE_KEYS.scores, familyScores);
-
+let tasks = [];
+let familyScores = {
+    " التجاني": 0,
+    " تهاني": 0,
+    "أحمد": 0,
+    "السر": 0,
+    "أسامة": 0,
+    "محمد": 0,
+    "العائلة": 0
+};
 let currentFilter = "all";
-
-// ======================================
-// 2. تشغيل الموقع
-// ======================================
+let currentLoggedInUser = null;
 
 document.addEventListener("DOMContentLoaded", () => {
     initializeTheme();
     initializeEvents();
-    renderTasks();
-    updateDashboard();
-    updateLeaderboard();
+
+    onAuthStateChanged(auth, (user) => {
+        const modal = document.getElementById("authModal");
+        if (user) {
+            currentLoggedInUser = Object.keys(MEMBER_EMAILS).find(key => MEMBER_EMAILS[key] === user.email) || "أحمد";
+            if (modal) modal.style.display = "none";
+            const userDisplay = document.getElementById("currentLoggedUserDisplay");
+            if (userDisplay) userDisplay.textContent = `مرحباً، ${currentLoggedInUser} 👤`;
+            initCloudSync();
+        } else {
+            if (modal) modal.style.display = "flex";
+            currentLoggedInUser = null;
+        }
+    });
 });
 
-// ======================================
-// 3. الأحداث
-// ======================================
+async function handleLogin() {
+    const userSelect = document.getElementById("loginUserSelect");
+    const pinInput = document.getElementById("loginPinInput");
+    const errorMsg = document.getElementById("authErrorMsg");
+
+    if (!userSelect || !pinInput || !errorMsg) return;
+
+    const userSelectValue = userSelect.value;
+    const rawPin = pinInput.value.trim();
+
+    if (!rawPin) {
+        errorMsg.textContent = "الرجاء إدخال رمز الـ PIN الخاص بك.";
+        return;
+    }
+
+    const email = MEMBER_EMAILS[userSelectValue];
+    if (!email) {
+        errorMsg.textContent = "حدث خطأ في تحديد الحساب.";
+        return;
+    }
+
+    try {
+        errorMsg.textContent = "جاري التحقق وتسجيل الدخول...";
+        await signInWithEmailAndPassword(auth, email, rawPin);
+        errorMsg.textContent = "";
+        pinInput.value = "";
+    } catch (error) {
+        console.error(error);
+        errorMsg.textContent = "رمز الـ PIN غير صحيح. تأكد من الرمز وحاول مجدداً.";
+    }
+}
+
+function handleLogout() {
+    signOut(auth).then(() => {
+        location.reload();
+    });
+}
+
+function initCloudSync() {
+    onSnapshot(collection(db, "familyTasks"), (snapshot) => {
+        tasks = [];
+        snapshot.forEach((docSnap) => {
+            let data = docSnap.data();
+            tasks.push({
+                id: docSnap.id,
+                text: data.text,
+                category: data.category,
+                user: data.user,
+                completed: data.completed
+            });
+        });
+        renderTasks();
+        updateDashboard();
+    });
+
+    onSnapshot(doc(db, "familyData", "scores"), (docSnap) => {
+        if (docSnap.exists()) {
+            familyScores = docSnap.data();
+        }
+        updateLeaderboard();
+    });
+}
 
 function initializeEvents() {
     const form = document.getElementById("taskForm");
-
     if (form) {
         form.addEventListener("submit", event => {
             event.preventDefault();
-            addTask();
+            addCloudTask();
         });
+    }
+
+    const loginBtn = document.getElementById("loginBtn");
+    if (loginBtn) {
+        loginBtn.addEventListener("click", handleLogin);
+    }
+
+    const logoutBtn = document.getElementById("logoutBtn");
+    if (logoutBtn) {
+        logoutBtn.addEventListener("click", handleLogout);
     }
 
     const themeToggle = document.getElementById("themeToggle");
@@ -126,10 +168,9 @@ function initializeEvents() {
 
     const taskList = document.getElementById("taskList");
     if (taskList) {
-        // استخدام التفويض للأحداث الخاصة بالمهام
         taskList.addEventListener("change", event => {
             if (event.target.classList.contains("task-check")) {
-                toggleTask(event.target.dataset.id);
+                toggleCloudTask(event.target.dataset.id);
             }
         });
 
@@ -137,17 +178,13 @@ function initializeEvents() {
             const deleteButton = event.target.closest(".delete-btn");
 
             if (deleteButton) {
-                deleteTask(deleteButton.dataset.id);
+                deleteCloudTask(deleteButton.dataset.id);
             }
         });
     }
 }
 
-// ======================================
-// 4. إضافة مهمة جديدة
-// ======================================
-
-function addTask() {
+async function addCloudTask() {
     const input = document.getElementById("taskInput");
     const category = document.getElementById("categorySelect").value;
     const user = document.getElementById("userSelect").value;
@@ -162,28 +199,63 @@ function addTask() {
         return;
     }
 
-    const newTask = {
-        id: createId(),
-        text,
-        category,
-        user,
-        completed: false
-    };
-
-    tasks.unshift(newTask);
-
-    saveStorage(STORAGE_KEYS.tasks, tasks);
-
-    input.value = "";
-    renderTasks();
-    updateDashboard();
-
-    input.focus();
+    try {
+        await addDoc(collection(db, "familyTasks"), {
+            text,
+            category,
+            user,
+            completed: false,
+            createdAt: Date.now()
+        });
+        input.value = "";
+        input.focus();
+    } catch (e) {
+        console.error("خطأ في إضافة المهمة:", e);
+    }
 }
 
-// ======================================
-// 5. عرض المهام
-// ======================================
+async function toggleCloudTask(id) {
+    const task = tasks.find(item => item.id === id);
+
+    if (!task) return;
+
+    const newCompletedState = !task.completed;
+    const pointsChange = newCompletedState ? 10 : -10;
+
+    try {
+        await updateDoc(doc(db, "familyTasks", id), {
+            completed: newCompletedState
+        });
+
+        familyScores[task.user] = Math.max(
+            0,
+            (familyScores[task.user] || 0) + pointsChange
+        );
+
+        await setDoc(doc(db, "familyData", "scores"), familyScores);
+
+        if (newCompletedState && typeof confetti === "function") {
+            confetti({
+                particleCount: 65,
+                spread: 65,
+                origin: { y: 0.7 }
+            });
+        }
+    } catch (e) {
+        console.error("خطأ في تحديث المهمة:", e);
+    }
+}
+
+async function deleteCloudTask(id) {
+    const confirmed = confirm("هل تريد حذف هذه المهمة من السحابة؟");
+    if (!confirmed) return;
+
+    try {
+        await deleteDoc(doc(db, "familyTasks", id));
+    } catch (e) {
+        console.error("خطأ في الحذف:", e);
+    }
+}
 
 function renderTasks() {
     const list = document.getElementById("taskList");
@@ -261,67 +333,6 @@ function renderTasks() {
     }
 }
 
-// ======================================
-// 6. إكمال المهمة ونظام النقاط
-// ======================================
-
-function toggleTask(id) {
-    const task = tasks.find(item => item.id === id);
-
-    if (!task) return;
-
-    task.completed = !task.completed;
-
-    // 10 نقاط عند الإكمال وخصمها عند إلغاء الإكمال
-    const points = task.completed ? 10 : -10;
-
-    familyScores[task.user] = Math.max(
-        0,
-        (familyScores[task.user] || 0) + points
-    );
-
-    saveStorage(STORAGE_KEYS.tasks, tasks);
-    saveStorage(STORAGE_KEYS.scores, familyScores);
-
-    renderTasks();
-    updateDashboard();
-    updateLeaderboard();
-
-    if (task.completed && typeof confetti === "function") {
-        confetti({
-            particleCount: 65,
-            spread: 65,
-            origin: { y: 0.7 }
-        });
-    }
-}
-
-// ======================================
-// 7. حذف المهمة
-// ======================================
-
-function deleteTask(id) {
-    const task = tasks.find(item => item.id === id);
-
-    if (!task) return;
-
-    const confirmed = confirm("هل تريد حذف هذه المهمة؟");
-
-    if (!confirmed) return;
-
-    // النقاط المكتسبة سابقاً تبقى محفوظة
-    tasks = tasks.filter(item => item.id !== id);
-
-    saveStorage(STORAGE_KEYS.tasks, tasks);
-
-    renderTasks();
-    updateDashboard();
-}
-
-// ======================================
-// 8. تحديث الإحصائيات ونسبة الإنجاز
-// ======================================
-
 function updateDashboard() {
     const total = tasks.length;
     const completed = tasks.filter(task => task.completed).length;
@@ -361,10 +372,6 @@ function updateDashboard() {
 
     if (elProgressMsg) elProgressMsg.textContent = message;
 }
-
-// ======================================
-// 9. لوحة متصدري النقاط
-// ======================================
 
 function updateLeaderboard() {
     const leaderboard = document.getElementById("leaderboard");
@@ -408,12 +415,8 @@ function updateLeaderboard() {
     });
 }
 
-// ======================================
-// 10. الوضع الليلي والنهاري
-// ======================================
-
 function initializeTheme() {
-    const savedTheme = localStorage.getItem(STORAGE_KEYS.theme);
+    const savedTheme = localStorage.getItem("familyTheme");
     const darkMode = savedTheme === "dark";
 
     document.body.classList.toggle("dark-theme", darkMode);
@@ -424,7 +427,7 @@ function toggleDarkMode() {
     const isDark = document.body.classList.toggle("dark-theme");
 
     localStorage.setItem(
-        STORAGE_KEYS.theme,
+        "familyTheme",
         isDark ? "dark" : "light"
     );
 
