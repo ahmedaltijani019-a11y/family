@@ -1,445 +1,112 @@
-import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
-import { getAuth, signInWithEmailAndPassword, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
-import { getFirestore, collection, addDoc, getDocs, updateDoc, doc, deleteDoc, onSnapshot, setDoc, getDoc } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
-
-const firebaseConfig = {
-    apiKey: "AIzaSyDeuWVOzOs784lretb6GVByMspAY4EzN_k",
-    authDomain: "family-b2c75.firebaseapp.com",
-    projectId: "family-b2c75",
-    storageBucket: "family-b2c75.firebasestorage.app",
-    messagingSenderId: "321218921724",
-    appId: "1:321218921724:web:85ffd3453b60ca6c798379",
-    measurementId: "G-XJ38GSJBDE"
-};
-
-const app = initializeApp(firebaseConfig);
-const auth = getAuth(app);
-const db = getFirestore(app);
-
-const FAMILY_MEMBERS = [
-    "أحمد",
-    "السر",
-    "أسامة",
-    "محمد"
-];
-
-const MEMBER_EMAILS = {
-    "أحمد": "ahmed@family.com",
-    "السر": "elssier@family.com",
-    "أسامة": "osama@family.com",
-    "محمد": "mohamed@family.com"
-};
-
-const MEMBER_AVATARS = {
-    "أحمد": "💻",
-    "السر": "🚀",
-    "أسامة": "⚡",
-    "محمد": "🎯"
-};
-
-let tasks = [];
-let familyScores = {
-    "أحمد": 0,
-    "السر": 0,
-    "أسامة": 0,
-    "محمد": 0
-};
-let currentFilter = "all";
-let currentLoggedInUser = null;
-
-document.addEventListener("DOMContentLoaded", () => {
-    initializeTheme();
-    initializeEvents();
-
-    onAuthStateChanged(auth, (user) => {
-        const modal = document.getElementById("authModal");
-        if (user) {
-            currentLoggedInUser = Object.keys(MEMBER_EMAILS).find(key => MEMBER_EMAILS[key] === user.email) || "أحمد";
-            if (modal) modal.style.display = "none";
-            const userDisplay = document.getElementById("currentLoggedUserDisplay");
-            if (userDisplay) userDisplay.textContent = `مرحباً، ${currentLoggedInUser} 👤`;
-            initCloudSync();
-        } else {
-            if (modal) modal.style.display = "grid";
-            currentLoggedInUser = null;
-        }
-    });
-});
-
-window.handleLogin = async function() {
-    const userSelect = document.getElementById("loginUserSelect");
-    const pinInput = document.getElementById("loginPinInput");
-    const errorMsg = document.getElementById("authErrorMsg");
-
-    if (!userSelect || !pinInput || !errorMsg) return;
-
-    const userSelectValue = userSelect.value;
-    const rawPin = pinInput.value.trim();
-
-    if (!rawPin) {
-        errorMsg.textContent = "الرجاء إدخال رمز الـ PIN الخاص بك.";
-        return;
-    }
-
-    const email = MEMBER_EMAILS[userSelectValue];
-    if (!email) {
-        errorMsg.textContent = "حدث خطأ في تحديد الحساب.";
-        return;
-    }
-
-    try {
-        errorMsg.textContent = "جاري التحقق وتسجيل الدخول...";
-        await signInWithEmailAndPassword(auth, email, rawPin);
-        errorMsg.textContent = "";
-        pinInput.value = "";
-    } catch (error) {
-        console.error(error);
-        errorMsg.textContent = "رمز الـ PIN غير صحيح. تأكد من الرمز وحاول مجدداً.";
-    }
-};
-
-window.handleLogout = function() {
-    signOut(auth).then(() => {
-        location.reload();
-    });
-};
-
-async function initCloudSync() {
-    await migrateLocalDataToCloudIfNeeded();
-
-    onSnapshot(collection(db, "familyTasks"), (snapshot) => {
-        tasks = [];
-        snapshot.forEach((docSnap) => {
-            let data = docSnap.data();
-            tasks.push({
-                id: docSnap.id,
-                text: data.text,
-                category: data.category,
-                user: data.user,
-                completed: data.completed
-            });
-        });
-        renderTasks();
-        updateDashboard();
-    });
-
-    onSnapshot(doc(db, "familyData", "scores"), (docSnap) => {
-        if (docSnap.exists()) {
-            familyScores = docSnap.data();
-        }
-        updateLeaderboard();
-        updateDashboard();
-    });
-}
-
-async function migrateLocalDataToCloudIfNeeded() {
-    try {
-        const localTasks = JSON.parse(localStorage.getItem("familyTasks")) || [];
-        const scoresDocRef = doc(db, "familyData", "scores");
-        const scoresSnap = await getDoc(scoresDocRef);
-
-        if (!scoresSnap.exists() && localStorage.getItem("familyScores")) {
-            const localScores = JSON.parse(localStorage.getItem("familyScores"));
-            await setDoc(scoresDocRef, localScores);
-        }
-
-        if (localTasks.length > 0 && !localStorage.getItem("migratedToCloud")) {
-            for (let t of localTasks) {
-                await addDoc(collection(db, "familyTasks"), {
-                    text: t.text,
-                    category: t.category || "📌 أخرى",
-                    user: t.user || "أحمد",
-                    completed: Boolean(t.completed),
-                    createdAt: Date.now()
-                });
-            }
-            localStorage.setItem("migratedToCloud", "true");
-        }
-    } catch (e) {
-        console.error("خطأ في الترحيل للسحابة:", e);
-    }
-}
-
-function initializeEvents() {
-    const form = document.getElementById("taskForm");
-    if (form) {
-        form.addEventListener("submit", event => {
-            event.preventDefault();
-            addCloudTask();
-        });
-    }
-
-    const themeToggle = document.getElementById("themeToggle");
-    if (themeToggle) {
-        themeToggle.addEventListener("click", toggleDarkMode);
-    }
-
-    document.querySelectorAll(".filter-btn").forEach(button => {
-        button.addEventListener("click", () => {
-            currentFilter = button.dataset.filter;
-            document.querySelectorAll(".filter-btn").forEach(btn => {
-                btn.classList.toggle("active", btn === button);
-            });
-            renderTasks();
-        });
-    });
-
-    const taskList = document.getElementById("taskList");
-    if (taskList) {
-        taskList.addEventListener("change", event => {
-            if (event.target.classList.contains("task-check")) {
-                toggleCloudTask(event.target.dataset.id);
-            }
-        });
-
-        taskList.addEventListener("click", event => {
-            const deleteButton = event.target.closest(".delete-btn");
-            if (deleteButton) {
-                deleteCloudTask(deleteButton.dataset.id);
-            }
-        });
-    }
-}
-
-async function addCloudTask() {
-    const input = document.getElementById("taskInput");
-    const category = document.getElementById("categorySelect").value;
-    const user = document.getElementById("userSelect").value;
-    const text = input.value.trim();
-
-    if (!text) return;
-
-    try {
-        await addDoc(collection(db, "familyTasks"), {
-            text,
-            category,
-            user,
-            completed: false,
-            createdAt: Date.now()
-        });
-        input.value = "";
-        input.focus();
-    } catch (e) {
-        console.error("خطأ في إضافة المهمة:", e);
-    }
-}
-
-async function toggleCloudTask(id) {
-    const task = tasks.find(item => item.id === id);
-    if (!task) return;
-
-    const newCompletedState = !task.completed;
-    const pointsChange = newCompletedState ? 10 : -10;
-
-    try {
-        await updateDoc(doc(db, "familyTasks", id), {
-            completed: newCompletedState
-        });
-
-        familyScores[task.user] = Math.max(0, (familyScores[task.user] || 0) + pointsChange);
-        await setDoc(doc(db, "familyData", "scores"), familyScores);
-
-        if (newCompletedState && typeof confetti === "function") {
-            confetti({ particleCount: 65, spread: 65, origin: { y: 0.7 } });
-        }
-    } catch (e) {
-        console.error("خطأ في تحديث المهمة:", e);
-    }
-}
-
-async function deleteCloudTask(id) {
-    if (!confirm("هل تريد حذف هذه المهمة من السحابة؟")) return;
-
-    try {
-        await deleteDoc(doc(db, "familyTasks", id));
-    } catch (e) {
-        console.error("خطأ في الحذف:", e);
-    }
-}
-
-function renderTasks() {
-    const list = document.getElementById("taskList");
-    const emptyState = document.getElementById("emptyState");
-    if (!list) return;
-
-    list.replaceChildren();
-
-    const filteredTasks = tasks.filter(task => {
-        if (currentFilter === "pending") return !task.completed;
-        if (currentFilter === "completed") return task.completed;
-        return true;
-    });
-
-    if (emptyState) emptyState.hidden = filteredTasks.length > 0;
-    list.hidden = filteredTasks.length === 0;
-
-    filteredTasks.forEach(task => {
-        const item = document.createElement("li");
-        item.className = "task-item";
-        if (task.completed) item.classList.add("completed");
-
-        const checkbox = document.createElement("input");
-        checkbox.type = "checkbox";
-        checkbox.className = "task-check";
-        checkbox.checked = task.completed;
-        checkbox.dataset.id = task.id;
-
-        const info = document.createElement("div");
-        info.className = "task-info";
-
-        const name = document.createElement("span");
-        name.className = "task-name";
-        name.textContent = task.text;
-
-        const meta = document.createElement("div");
-        meta.className = "task-meta";
-
-        const category = document.createElement("span");
-        category.className = "task-tag";
-        category.textContent = task.category;
-
-        const user = document.createElement("span");
-        user.className = "task-tag";
-        user.textContent = (MEMBER_AVATARS[task.user] || "👤") + " " + task.user;
-
-        meta.append(category, user);
-        info.append(name, meta);
-
-        const deleteButton = document.createElement("button");
-        deleteButton.type = "button";
-        deleteButton.className = "delete-btn";
-        deleteButton.textContent = "حذف";
-        deleteButton.dataset.id = task.id;
-
-        item.append(checkbox, info, deleteButton);
-        list.appendChild(item);
-    });
-
-    const taskCount = document.getElementById("taskCount");
-    if (taskCount) taskCount.textContent = filteredTasks.length + " مهمة";
-}
-
-function updateDashboard() {
-    const total = tasks.length;
-    const completed = tasks.filter(task => task.completed).length;
-    const remaining = total - completed;
-    const percentage = total === 0 ? 0 : Math.round((completed / total) * 100);
-
-    const totalPoints = Object.values(familyScores).reduce((sum, pts) => sum + pts, 0);
-
-    const elTotal = document.getElementById("totalTasks");
-    const elCompleted = document.getElementById("completedTasks");
-    const elRemaining = document.getElementById("remainingTasks");
-    const elPoints = document.getElementById("totalPoints");
-    const elProgressText = document.getElementById("progressText");
-    const elProgressBar = document.getElementById("progressBar");
-    const elProgressMsg = document.getElementById("progressMessage");
-
-    if (elTotal) elTotal.textContent = total;
-    if (elCompleted) elCompleted.textContent = completed;
-    if (elRemaining) elRemaining.textContent = remaining;
-    if (elPoints) elPoints.textContent = totalPoints;
-    if (elProgressText) elProgressText.textContent = percentage + "%";
-    if (elProgressBar) elProgressBar.style.width = percentage + "%";
-
-    let message = "لنبدأ بإنجاز المهام اليومية!";
-    if (percentage === 100 && total > 0) message = "رائع! تم إنجاز جميع المهام 🎉";
-    else if (percentage >= 70) message = "إنجاز ممتاز! اقتربتم من النهاية.";
-    else if (percentage >= 30) message = "عمل رائع، استمروا!";
-
-    if (elProgressMsg) elProgressMsg.textContent = message;
-}
-
-function getMemberLevelAndBadge(points) {
-    if (points >= 300) return { level: 4, title: "👑 أسطورة المنصة", badge: "البطل" };
-    if (points >= 150) return { level: 3, title: "🔥 نشيط جداً", badge: "المثابر" };
-    if (points >= 50)  return { level: 2, title: "⭐ في الطريق للمجد", badge: "النشيط" };
-    return { level: 1, title: "🌱 مبتدئ", badge: "مبتدئ" };
-}
-
-function updateLeaderboard() {
-    const leaderboard = document.getElementById("leaderboard");
-    if (!leaderboard) return;
-    
-    leaderboard.replaceChildren();
-
-    const sortedMembers = FAMILY_MEMBERS
-        .map(user => ({ 
-            name: user, 
-            points: familyScores[user] || 0,
-            ...getMemberLevelAndBadge(familyScores[user] || 0)
-        }))
-        .sort((a, b) => b.points - a.points);
-
-    sortedMembers.forEach((member, index) => {
-        const row = document.createElement("div");
-        row.className = "leader-row";
-        row.style.display = "flex";
-        row.style.alignItems = "center";
-        row.style.justifyContent = "space-between";
-        row.style.padding = "10px 14px";
-        row.style.marginBottom = "8px";
-        row.style.background = "rgba(168, 85, 247, 0.08)";
-        row.style.border = "1px solid rgba(168, 85, 247, 0.2)";
-        row.style.borderRadius = "12px";
-
-        const leftSide = document.createElement("div");
-        leftSide.style.display = "flex";
-        leftSide.style.alignItems = "center";
-        leftSide.style.gap = "10px";
-
-        const rank = document.createElement("span");
-        rank.style.fontWeight = "bold";
-        rank.style.fontSize = "1rem";
-        rank.textContent = index === 0 ? "🥇" : index === 1 ? "🥈" : index === 2 ? "🥉" : `#${index + 1}`;
-
-        const avatar = document.createElement("span");
-        avatar.style.fontSize = "1.3rem";
-        avatar.textContent = MEMBER_AVATARS[member.name] || "👤";
-
-        const infoDiv = document.createElement("div");
-        
-        const name = document.createElement("span");
-        name.style.fontWeight = "bold";
-        name.style.display = "block";
-        name.style.fontSize = "0.9rem";
-        name.textContent = member.name;
-
-        const badge = document.createElement("span");
-        badge.style.fontSize = "0.7rem";
-        badge.style.opacity = "0.85";
-        badge.textContent = `${member.title} | ${member.badge}`;
-
-        infoDiv.append(name, badge);
-        leftSide.append(rank, avatar, infoDiv);
-
-        const points = document.createElement("span");
-        points.style.fontWeight = "bold";
-        points.style.fontSize = "0.95rem";
-        points.style.color = "#a855f7";
-        points.textContent = member.points + " ⭐ XP";
-
-        row.append(leftSide, points);
-        leaderboard.appendChild(row);
-    });
-}
-
-function initializeTheme() {
-    const savedTheme = localStorage.getItem("familyTheme");
-    const darkMode = savedTheme === "dark";
-    document.body.classList.toggle("dark-theme", darkMode);
-    updateThemeButton(darkMode);
-}
-
-window.toggleDarkMode = function() {
-    const isDark = document.body.classList.toggle("dark-theme");
-    localStorage.setItem("familyTheme", isDark ? "dark" : "light");
-    updateThemeButton(isDark);
-};
-
-function updateThemeButton(isDark) {
-    const icon = document.getElementById("themeIcon");
-    const label = document.getElementById("themeLabel");
-    if (icon) icon.textContent = isDark ? "☀️" : "🌙";
-    if (label) label.textContent = isDark ? "الوضع النهاري" : "الوضع الليلي";
-}
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>المنصة الذكية</title>
+    <link rel="stylesheet" href="style.css">
+    <!-- مكتبة التأثيرات المرئية -->
+    <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.5.1/dist/confetti.browser.min.js"></script>
+</head>
+<body>
+
+    <!-- نافذة تسجيل الدخول -->
+    <div id="authModal" class="auth-modal" style="display: none;">
+        <div class="auth-card">
+            <div class="auth-icon">🏠</div>
+            <h2>تسجيل الدخول للمنصة</h2>
+            <p>اختر اسمك وأدخل رمز الـ PIN الخاص بك للمتابعة:</p>
+            
+            <div class="auth-form-group">
+                <label for="loginUserSelect">اسم المستخدم</label>
+                <select id="loginUserSelect">
+                    <option value="أحمد">أحمد</option>
+                    <option value="السر">السر</option>
+                    <option value="أسامة">أسامة</option>
+                    <option value="محمد">محمد</option>
+                </select>
+            </div>
+
+            <div class="auth-form-group">
+                <label for="loginPinInput">رمز المرور (PIN)</label>
+                <input type="password" id="loginPinInput" placeholder="******" maxlength="6">
+            </div>
+
+            <button type="button" id="loginBtn" onclick="handleLogin()">دخول المنصة 🚀</button>
+            <p id="authErrorMsg" class="error-msg"></p>
+        </div>
+    </div>
+
+    <!-- الواجهة الرئيسية -->
+    <div class="app-container">
+        <!-- شريط التنقل العلوي / معلومات المستخدم -->
+        <header class="app-header">
+            <div class="user-welcome" id="currentLoggedUserDisplay">مرحباً</div>
+            <div class="header-controls">
+                <button id="themeToggle" class="theme-btn"><span id="themeIcon">🌙</span> <span id="themeLabel">الوضع الليلي</span></button>
+                <button onclick="handleLogout()" class="logout-btn">تسجيل الخروج</button>
+            </div>
+        </header>
+
+        <main class="main-content">
+            <!-- لوحة المتصدرين والمستويات -->
+            <section class="sidebar-section">
+                <h3>🏆 لوحة المتصدرين</h3>
+                <div id="leaderboard"></div>
+            </section>
+
+            <!-- إدارة المهام -->
+            <section class="tasks-section">
+                <div class="card">
+                    <h2>إضافة طلب أو تذكير</h2>
+                    <form id="taskForm">
+                        <div class="form-group">
+                            <label for="taskInput">اسم المهمة</label>
+                            <input type="text" id="taskInput" placeholder="اكتب المهمة هنا..." required>
+                        </div>
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label for="userSelect">المسؤول عن المهمة</label>
+                                <select id="userSelect">
+                                    <option value="أحمد">أحمد</option>
+                                    <option value="السر">السر</option>
+                                    <option value="أسامة">أسامة</option>
+                                    <option value="محمد">محمد</option>
+                                </select>
+                            </div>
+                            <div class="form-group">
+                                <label for="categorySelect">التصنيف</label>
+                                <select id="categorySelect">
+                                    <option value="📌 أخرى">📌 أخرى</option>
+                                    <option value="🛒 طلبات منزلية">🛒 طلبات منزلية</option>
+                                    <option value="💻 مهام برمجية">💻 مهام برمجية</option>
+                                    <option value="🧹 ترتيب وتنظيف">🧹 ترتيب وتنظيف</option>
+                                </select>
+                            </div>
+                        </div>
+                        <button type="submit" class="submit-btn">+ إضافة المهمة للسحابة</button>
+                    </form>
+                </div>
+
+                <!-- قائمة المهام -->
+                <div class="card">
+                    <div class="tasks-header">
+                        <h2>قائمة المهام السحابية</h2>
+                        <span id="taskCount">0 مهمة</span>
+                    </div>
+                    <div class="filters">
+                        <button class="filter-btn active" data-filter="all">الكل</button>
+                        <button class="filter-btn" data-filter="pending">قيد الانتظار</button>
+                        <button class="filter-btn" data-filter="completed">مكتملة</button>
+                    </div>
+                    <ul id="taskList"></ul>
+                    <div id="emptyState" class="empty-state">لا توجد مهام حالياً</div>
+                </div>
+            </section>
+        </main>
+    </div>
+
+    <!-- ملف الجافاسكريبت الرئيسي -->
+    <script type="module" src="script.js"></script>
+</body>
+</html>

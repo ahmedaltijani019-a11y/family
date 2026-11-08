@@ -1,9 +1,6 @@
-// ======================================
-// 1. إعدادات Firebase والمكتبات السحابية
-// ======================================
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
 import { getAuth, signInWithEmailAndPassword, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
-import { getFirestore, collection, addDoc, getDocs, updateDoc, doc, deleteDoc, onSnapshot, setDoc, getDoc } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
+import { getFirestore, collection, addDoc, updateDoc, doc, deleteDoc, onSnapshot, setDoc, getDoc } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
 
 const firebaseConfig = {
     apiKey: "AIzaSyDeuWVOzOs784lretb6GVByMspAY4EzN_k",
@@ -19,45 +16,28 @@ const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 const db = getFirestore(app);
 
-const FAMILY_MEMBERS = [
-    " التجاني",
-    " تهاني",
-    "أحمد",
-    "السر",
-    "أسامة",
-    "محمد",
-    
-];
+const FAMILY_MEMBERS = ["أحمد", "السر", "أسامة", "محمد"];
 
 const MEMBER_EMAILS = {
-    "الوالد التجاني": "eltijani@family.com",
-    "الوالدة تهاني": "tahani@family.com",
     "أحمد": "ahmed@family.com",
     "السر": "elssier@family.com",
     "أسامة": "osama@family.com",
     "محمد": "mohamed@family.com"
 };
 
-// الصور الرمزية (Avatars) لكل فرد من العائلة
 const MEMBER_AVATARS = {
-    " التجاني": "🧔🏻‍♂️",
-    " تهاني": "🧕🏻",
     "أحمد": "💻",
     "السر": "🚀",
     "أسامة": "⚡",
-    "محمد": "🎯",
-    
+    "محمد": "🎯"
 };
 
 let tasks = [];
 let familyScores = {
-    " التجاني": 0,
-    " تهاني": 0,
     "أحمد": 0,
     "السر": 0,
     "أسامة": 0,
-    "محمد": 0,
-    
+    "محمد": 0
 };
 let currentFilter = "all";
 let currentLoggedInUser = null;
@@ -81,7 +61,6 @@ document.addEventListener("DOMContentLoaded", () => {
     });
 });
 
-// دالة تسجيل الدخول (معروضة على window لضمان عملها في أي مكان)
 window.handleLogin = async function() {
     const userSelect = document.getElementById("loginUserSelect");
     const pinInput = document.getElementById("loginPinInput");
@@ -121,8 +100,6 @@ window.handleLogout = function() {
 };
 
 async function initCloudSync() {
-    await migrateLocalDataToCloudIfNeeded();
-
     onSnapshot(collection(db, "familyTasks"), (snapshot) => {
         tasks = [];
         snapshot.forEach((docSnap) => {
@@ -136,7 +113,6 @@ async function initCloudSync() {
             });
         });
         renderTasks();
-        updateDashboard();
     });
 
     onSnapshot(doc(db, "familyData", "scores"), (docSnap) => {
@@ -144,36 +120,7 @@ async function initCloudSync() {
             familyScores = docSnap.data();
         }
         updateLeaderboard();
-        updateDashboard();
     });
-}
-
-async function migrateLocalDataToCloudIfNeeded() {
-    try {
-        const localTasks = JSON.parse(localStorage.getItem("familyTasks")) || [];
-        const scoresDocRef = doc(db, "familyData", "scores");
-        const scoresSnap = await getDoc(scoresDocRef);
-
-        if (!scoresSnap.exists() && localStorage.getItem("familyScores")) {
-            const localScores = JSON.parse(localStorage.getItem("familyScores"));
-            await setDoc(scoresDocRef, localScores);
-        }
-
-        if (localTasks.length > 0 && !localStorage.getItem("migratedToCloud")) {
-            for (let t of localTasks) {
-                await addDoc(collection(db, "familyTasks"), {
-                    text: t.text,
-                    category: t.category || "📌 أخرى",
-                    user: t.user || "العائلة",
-                    completed: Boolean(t.completed),
-                    createdAt: Date.now()
-                });
-            }
-            localStorage.setItem("migratedToCloud", "true");
-        }
-    } catch (e) {
-        console.error("خطأ في الترحيل للسحابة:", e);
-    }
 }
 
 function initializeEvents() {
@@ -182,15 +129,6 @@ function initializeEvents() {
         form.addEventListener("submit", event => {
             event.preventDefault();
             addCloudTask();
-        });
-    }
-
-    // ربط زر تسجيل الدخول برمجياً احتياطياً
-    const loginBtn = document.querySelector("#authModal button") || document.getElementById("loginBtn");
-    if (loginBtn) {
-        loginBtn.addEventListener("click", (e) => {
-            e.preventDefault();
-            window.handleLogin();
         });
     }
 
@@ -344,43 +282,11 @@ function renderTasks() {
     if (taskCount) taskCount.textContent = filteredTasks.length + " مهمة";
 }
 
-function updateDashboard() {
-    const total = tasks.length;
-    const completed = tasks.filter(task => task.completed).length;
-    const remaining = total - completed;
-    const percentage = total === 0 ? 0 : Math.round((completed / total) * 100);
-
-    const totalPoints = Object.values(familyScores).reduce((sum, pts) => sum + pts, 0);
-
-    const elTotal = document.getElementById("totalTasks");
-    const elCompleted = document.getElementById("completedTasks");
-    const elRemaining = document.getElementById("remainingTasks");
-    const elPoints = document.getElementById("totalPoints");
-    const elProgressText = document.getElementById("progressText");
-    const elProgressBar = document.getElementById("progressBar");
-    const elProgressMsg = document.getElementById("progressMessage");
-
-    if (elTotal) elTotal.textContent = total;
-    if (elCompleted) elCompleted.textContent = completed;
-    if (elRemaining) elRemaining.textContent = remaining;
-    if (elPoints) elPoints.textContent = totalPoints;
-    if (elProgressText) elProgressText.textContent = percentage + "%";
-    if (elProgressBar) elProgressBar.style.width = percentage + "%";
-
-    let message = "لنبدأ بإنجاز مهامنا اليوم!";
-    if (percentage === 100 && total > 0) message = "رائع! أنجزت العائلة جميع المهام 🎉";
-    else if (percentage >= 70) message = "إنجاز ممتاز! اقتربتم من النهاية.";
-    else if (percentage >= 30) message = "عمل رائع، استمروا معاً!";
-
-    if (elProgressMsg) elProgressMsg.textContent = message;
-}
-
-// نظام المستويات والشارات بناءً على النقاط (XP)
 function getMemberLevelAndBadge(points) {
-    if (points >= 300) return { level: 4, title: "👑 أسطورة العائلة", badge: "بطل الأسبوع" };
+    if (points >= 300) return { level: 4, title: "👑 أسطورة المنصة", badge: "البطل" };
     if (points >= 150) return { level: 3, title: "🔥 نشيط جداً", badge: "المثابر" };
     if (points >= 50)  return { level: 2, title: "⭐ في الطريق للمجد", badge: "النشيط" };
-    return { level: 1, title: "🌱 بذور البداية", badge: "مبتدئ" };
+    return { level: 1, title: "🌱 مبتدئ", badge: "مبتدئ" };
 }
 
 function updateLeaderboard() {
@@ -412,4 +318,60 @@ function updateLeaderboard() {
         const leftSide = document.createElement("div");
         leftSide.style.display = "flex";
         leftSide.style.alignItems = "center";
-        leftSide
+        leftSide.style.gap = "10px";
+
+        const rank = document.createElement("span");
+        rank.style.fontWeight = "bold";
+        rank.style.fontSize = "1rem";
+        rank.textContent = index === 0 ? "🥇" : index === 1 ? "🥈" : index === 2 ? "🥉" : `#${index + 1}`;
+
+        const avatar = document.createElement("span");
+        avatar.style.fontSize = "1.3rem";
+        avatar.textContent = MEMBER_AVATARS[member.name] || "👤";
+
+        const infoDiv = document.createElement("div");
+        
+        const name = document.createElement("span");
+        name.style.fontWeight = "bold";
+        name.style.display = "block";
+        name.style.fontSize = "0.9rem";
+        name.textContent = member.name;
+
+        const badge = document.createElement("span");
+        badge.style.fontSize = "0.7rem";
+        badge.style.opacity = "0.85";
+        badge.textContent = `${member.title} | ${member.badge}`;
+
+        infoDiv.append(name, badge);
+        leftSide.append(rank, avatar, infoDiv);
+
+        const points = document.createElement("span");
+        points.style.fontWeight = "bold";
+        points.style.fontSize = "0.95rem";
+        points.style.color = "#a855f7";
+        points.textContent = member.points + " ⭐ XP";
+
+        row.append(leftSide, points);
+        leaderboard.appendChild(row);
+    });
+}
+
+function initializeTheme() {
+    const savedTheme = localStorage.getItem("familyTheme");
+    const darkMode = savedTheme === "dark";
+    document.body.classList.toggle("dark-theme", darkMode);
+    updateThemeButton(darkMode);
+}
+
+window.toggleDarkMode = function() {
+    const isDark = document.body.classList.toggle("dark-theme");
+    localStorage.setItem("familyTheme", isDark ? "dark" : "light");
+    updateThemeButton(isDark);
+};
+
+function updateThemeButton(isDark) {
+    const icon = document.getElementById("themeIcon");
+    const label = document.getElementById("themeLabel");
+    if (icon) icon.textContent = isDark ? "☀️" : "🌙";
+    if (label) label.textContent = isDark ? "الوضع النهاري" : "الوضع الليلي";
+}
