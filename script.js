@@ -16,28 +16,34 @@ const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 const db = getFirestore(app);
 
-const FAMILY_MEMBERS = ["أحمد", "السر", "أسامة", "محمد"];
+const FAMILY_MEMBERS = [
+    "الوالد التجاني",
+    "الوالدة تهاني",
+    "أحمد",
+    "السر",
+    "أسامة",
+    "محمد",
+    "العائلة"
+];
 
 const MEMBER_EMAILS = {
+    "الوالد التجاني": "eltijani@family.com",
+    "الوالدة تهاني": "tahani@family.com",
     "أحمد": "ahmed@family.com",
     "السر": "elssier@family.com",
     "أسامة": "osama@family.com",
     "محمد": "mohamed@family.com"
 };
 
-const MEMBER_AVATARS = {
-    "أحمد": "💻",
-    "السر": "🚀",
-    "أسامة": "⚡",
-    "محمد": "🎯"
-};
-
 let tasks = [];
 let familyScores = {
+    "الوالد التجاني": 0,
+    "الوالدة تهاني": 0,
     "أحمد": 0,
     "السر": 0,
     "أسامة": 0,
-    "محمد": 0
+    "محمد": 0,
+    "العائلة": 0
 };
 let currentFilter = "all";
 let currentLoggedInUser = null;
@@ -113,6 +119,7 @@ async function initCloudSync() {
             });
         });
         renderTasks();
+        updateDashboard();
     });
 
     onSnapshot(doc(db, "familyData", "scores"), (docSnap) => {
@@ -263,7 +270,7 @@ function renderTasks() {
 
         const user = document.createElement("span");
         user.className = "task-tag";
-        user.textContent = (MEMBER_AVATARS[task.user] || "👤") + " " + task.user;
+        user.textContent = task.user;
 
         meta.append(category, user);
         info.append(name, meta);
@@ -282,13 +289,6 @@ function renderTasks() {
     if (taskCount) taskCount.textContent = filteredTasks.length + " مهمة";
 }
 
-function getMemberLevelAndBadge(points) {
-    if (points >= 300) return { level: 4, title: "👑 أسطورة المنصة", badge: "البطل" };
-    if (points >= 150) return { level: 3, title: "🔥 نشيط جداً", badge: "المثابر" };
-    if (points >= 50)  return { level: 2, title: "⭐ في الطريق للمجد", badge: "النشيط" };
-    return { level: 1, title: "🌱 مبتدئ", badge: "مبتدئ" };
-}
-
 function updateLeaderboard() {
     const leaderboard = document.getElementById("leaderboard");
     if (!leaderboard) return;
@@ -296,64 +296,32 @@ function updateLeaderboard() {
     leaderboard.replaceChildren();
 
     const sortedMembers = FAMILY_MEMBERS
-        .map(user => ({ 
-            name: user, 
-            points: familyScores[user] || 0,
-            ...getMemberLevelAndBadge(familyScores[user] || 0)
-        }))
+        .map(user => ({ name: user, points: familyScores[user] || 0 }))
         .sort((a, b) => b.points - a.points);
 
-    sortedMembers.forEach((member, index) => {
+    sortedMembers.forEach((member) => {
         const row = document.createElement("div");
-        row.className = "leader-row";
         row.style.display = "flex";
-        row.style.alignItems = "center";
         row.style.justifyContent = "space-between";
-        row.style.padding = "10px 14px";
-        row.style.marginBottom = "8px";
-        row.style.background = "rgba(168, 85, 247, 0.08)";
-        row.style.border = "1px solid rgba(168, 85, 247, 0.2)";
-        row.style.borderRadius = "12px";
+        row.style.padding = "8px 12px";
+        row.style.marginBottom = "6px";
+        row.style.background = "rgba(0,0,0,0.03)";
+        row.style.borderRadius = "8px";
 
-        const leftSide = document.createElement("div");
-        leftSide.style.display = "flex";
-        leftSide.style.alignItems = "center";
-        leftSide.style.gap = "10px";
+        const nameSpan = document.createElement("span");
+        nameSpan.textContent = member.name;
 
-        const rank = document.createElement("span");
-        rank.style.fontWeight = "bold";
-        rank.style.fontSize = "1rem";
-        rank.textContent = index === 0 ? "🥇" : index === 1 ? "🥈" : index === 2 ? "🥉" : `#${index + 1}`;
+        const pointsSpan = document.createElement("span");
+        pointsSpan.style.fontWeight = "bold";
+        pointsSpan.textContent = member.points + " ⭐";
 
-        const avatar = document.createElement("span");
-        avatar.style.fontSize = "1.3rem";
-        avatar.textContent = MEMBER_AVATARS[member.name] || "👤";
-
-        const infoDiv = document.createElement("div");
-        
-        const name = document.createElement("span");
-        name.style.fontWeight = "bold";
-        name.style.display = "block";
-        name.style.fontSize = "0.9rem";
-        name.textContent = member.name;
-
-        const badge = document.createElement("span");
-        badge.style.fontSize = "0.7rem";
-        badge.style.opacity = "0.85";
-        badge.textContent = `${member.title} | ${member.badge}`;
-
-        infoDiv.append(name, badge);
-        leftSide.append(rank, avatar, infoDiv);
-
-        const points = document.createElement("span");
-        points.style.fontWeight = "bold";
-        points.style.fontSize = "0.95rem";
-        points.style.color = "#a855f7";
-        points.textContent = member.points + " ⭐ XP";
-
-        row.append(leftSide, points);
+        row.append(nameSpan, pointsSpan);
         leaderboard.appendChild(row);
     });
+}
+
+function updateDashboard() {
+    // دالة مساعدة لتحديث اللوحة إذا لزم الأمر
 }
 
 function initializeTheme() {

@@ -2,8 +2,8 @@
     --bg-color: #f8fafc;
     --card-bg: #ffffff;
     --text-color: #1e293b;
-    --primary: #8b5cf6;
-    --primary-hover: #7c3aed;
+    --primary: #6366f1;
+    --primary-hover: #4f46e5;
     --border-color: #e2e8f0;
     --shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
 }
@@ -82,7 +82,7 @@ body {
     }
 }
 
-.card {
+.card, .info-card {
     background: var(--card-bg);
     padding: 20px;
     border-radius: 12px;
@@ -209,7 +209,6 @@ ul {
     opacity: 0.6;
 }
 
-/* نافذة الدخول */
 .auth-modal {
     position: fixed;
     top: 0;
