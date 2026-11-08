@@ -26,16 +26,27 @@ const FAMILY_MEMBERS = [
     "السر",
     "أسامة",
     "محمد",
-    
+    "العائلة"
 ];
 
 const MEMBER_EMAILS = {
     "الوالد التجاني": "eltijani@family.com",
     "الوالدة تهاني": "tahani@family.com",
-    "أحمد": "ahmed@family.com",       // إيميلك الشخصي
-    "السر": "elssier@family.com",      // إيميل السر
-    "أسامة": "osama@family.com",     // إيميل أسامة
-    "محمد": "mohamed@family.com"      // إيميل محمد
+    "أحمد": "ahmed@family.com",
+    "السر": "elssier@family.com",
+    "أسامة": "osama@family.com",
+    "محمد": "mohamed@family.com"
+};
+
+// الصور الرمزية (Avatars) لكل فرد من العائلة
+const MEMBER_AVATARS = {
+    "الوالد التجاني": "🧔🏻‍♂️",
+    "الوالدة تهاني": "🧕🏻",
+    "أحمد": "💻",
+    "السر": "🚀",
+    "أسامة": "⚡",
+    "محمد": "🎯",
+    "العائلة": "🏠"
 };
 
 let tasks = [];
@@ -46,7 +57,7 @@ let familyScores = {
     "السر": 0,
     "أسامة": 0,
     "محمد": 0,
-    
+    "العائلة": 0
 };
 let currentFilter = "all";
 let currentLoggedInUser = null;
@@ -74,13 +85,14 @@ window.handleLogin = async function() {
     const rawPin = document.getElementById("loginPinInput").value.trim();
     const errorMsg = document.getElementById("authErrorMsg");
 
-    const email = MEMBER_EMAILS[userSelect];
-    
-    // سطر طباعة للتحقق في الـ Console
-    console.log("جاري تجربة الدخول بالإيميل:", email, "والرمز:", rawPin);
-
     if (!rawPin) {
         errorMsg.textContent = "الرجاء إدخال رمز الـ PIN الخاص بك.";
+        return;
+    }
+
+    const email = MEMBER_EMAILS[userSelect];
+    if (!email) {
+        errorMsg.textContent = "حدث خطأ في تحديد الحساب.";
         return;
     }
 
@@ -90,7 +102,7 @@ window.handleLogin = async function() {
         errorMsg.textContent = "";
         document.getElementById("loginPinInput").value = "";
     } catch (error) {
-        console.error("خطأ Firebase كاملاً:", error);
+        console.error(error);
         errorMsg.textContent = "رمز الـ PIN غير صحيح. تأكد من الرمز وحاول مجدداً.";
     }
 };
@@ -255,125 +267,4 @@ function renderTasks() {
 
     const filteredTasks = tasks.filter(task => {
         if (currentFilter === "pending") return !task.completed;
-        if (currentFilter === "completed") return task.completed;
-        return true;
-    });
-
-    emptyState.hidden = filteredTasks.length > 0;
-    list.hidden = filteredTasks.length === 0;
-
-    filteredTasks.forEach(task => {
-        const item = document.createElement("li");
-        item.className = "task-item";
-        if (task.completed) item.classList.add("completed");
-
-        const checkbox = document.createElement("input");
-        checkbox.type = "checkbox";
-        checkbox.className = "task-check";
-        checkbox.checked = task.completed;
-        checkbox.dataset.id = task.id;
-
-        const info = document.createElement("div");
-        info.className = "task-info";
-
-        const name = document.createElement("span");
-        name.className = "task-name";
-        name.textContent = task.text;
-
-        const meta = document.createElement("div");
-        meta.className = "task-meta";
-
-        const category = document.createElement("span");
-        category.className = "task-tag";
-        category.textContent = task.category;
-
-        const user = document.createElement("span");
-        user.className = "task-tag";
-        user.textContent = "👤 " + task.user;
-
-        meta.append(category, user);
-        info.append(name, meta);
-
-        const deleteButton = document.createElement("button");
-        deleteButton.type = "button";
-        deleteButton.className = "delete-btn";
-        deleteButton.textContent = "حذف";
-        deleteButton.dataset.id = task.id;
-
-        item.append(checkbox, info, deleteButton);
-        list.appendChild(item);
-    });
-
-    document.getElementById("taskCount").textContent = filteredTasks.length + " مهمة";
-}
-
-function updateDashboard() {
-    const total = tasks.length;
-    const completed = tasks.filter(task => task.completed).length;
-    const remaining = total - completed;
-    const percentage = total === 0 ? 0 : Math.round((completed / total) * 100);
-
-    const totalPoints = Object.values(familyScores).reduce((sum, pts) => sum + pts, 0);
-
-    document.getElementById("totalTasks").textContent = total;
-    document.getElementById("completedTasks").textContent = completed;
-    document.getElementById("remainingTasks").textContent = remaining;
-    document.getElementById("totalPoints").textContent = totalPoints;
-
-    document.getElementById("progressText").textContent = percentage + "%";
-    document.getElementById("progressBar").style.width = percentage + "%";
-
-    let message = "لنبدأ بإنجاز مهامنا اليوم!";
-    if (percentage === 100 && total > 0) message = "رائع! أنجزت العائلة جميع المهام 🎉";
-    else if (percentage >= 70) message = "إنجاز ممتاز! اقتربتم من النهاية.";
-    else if (percentage >= 30) message = "عمل رائع، استمروا معاً!";
-
-    document.getElementById("progressMessage").textContent = message;
-}
-
-function updateLeaderboard() {
-    const leaderboard = document.getElementById("leaderboard");
-    leaderboard.replaceChildren();
-
-    const sortedMembers = FAMILY_MEMBERS
-        .map(user => ({ name: user, points: familyScores[user] || 0 }))
-        .sort((a, b) => b.points - a.points);
-
-    sortedMembers.forEach((member, index) => {
-        const row = document.createElement("div");
-        row.className = "leader-row";
-
-        const rank = document.createElement("span");
-        rank.className = "leader-rank";
-        rank.textContent = index === 0 ? "🥇" : index === 1 ? "🥈" : index === 2 ? "🥉" : index + 1;
-
-        const name = document.createElement("span");
-        name.className = "leader-name";
-        name.textContent = member.name;
-
-        const points = document.createElement("span");
-        points.className = "leader-points";
-        points.textContent = "⭐ " + member.points;
-
-        row.append(rank, name, points);
-        leaderboard.appendChild(row);
-    });
-}
-
-function initializeTheme() {
-    const savedTheme = localStorage.getItem("familyTheme");
-    const darkMode = savedTheme === "dark";
-    document.body.classList.toggle("dark-theme", darkMode);
-    updateThemeButton(darkMode);
-}
-
-window.toggleDarkMode = function() {
-    const isDark = document.body.classList.toggle("dark-theme");
-    localStorage.setItem("familyTheme", isDark ? "dark" : "light");
-    updateThemeButton(isDark);
-};
-
-function updateThemeButton(isDark) {
-    document.getElementById("themeIcon").textContent = isDark ? "☀️" : "🌙";
-    document.getElementById("themeLabel").textContent = isDark ? "الوضع النهاري" : "الوضع الليلي";
-}
+        if (currentFilter === "completed") return task.completed
