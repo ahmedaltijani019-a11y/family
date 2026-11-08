@@ -1,265 +1,449 @@
-<!DOCTYPE html>
-<html lang="ar" dir="rtl">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta name="theme-color" content="#f5f7fb">
-    <title>عائلتنا | المنصة الذكية السحابية</title>
+// ======================================
+// 1. إعدادات Firebase والمكتبات السحابية
+// ======================================
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
+import { getAuth, signInWithEmailAndPassword, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
+import { getFirestore, collection, addDoc, getDocs, updateDoc, doc, deleteDoc, onSnapshot, setDoc, getDoc } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
 
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+const firebaseConfig = {
+    apiKey: "AIzaSyDeuWVOzOs784lretb6GVByMspAY4EzN_k",
+    authDomain: "family-b2c75.firebaseapp.com",
+    projectId: "family-b2c75",
+    storageBucket: "family-b2c75.firebasestorage.app",
+    messagingSenderId: "321218921724",
+    appId: "1:321218921724:web:85ffd3453b60ca6c798379",
+    measurementId: "G-XJ38GSJBDE"
+};
 
-    <link rel="stylesheet" href="style.css">
-    <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.5.1/dist/confetti.browser.min.js"></script>
-    <!-- تم جعل سكريبت الجافاسكريبت بنظام الموديول لدعم Firebase -->
-    <script type="module" src="script.js" defer></script>
-</head>
+const app = initializeApp(firebaseConfig);
+const auth = getAuth(app);
+const db = getFirestore(app);
 
-<body>
+// الأسماء الصريحة فقط دون ألقاب عائلية
+const FAMILY_MEMBERS = [
+    "أحمد",
+    "السر",
+    "أسامة",
+    "محمد"
+];
 
-    <!-- نافذة تسجيل الدخول برمز PIN (تظهر عند عدم تسجيل الدخول) -->
-    <div id="authModal" class="auth-modal-overlay">
-        <div class="auth-modal-card">
-            <div class="brand-icon" style="margin: 0 auto 15px;">⌂</div>
-            <h2>تسجيل دخول عائلة التجاني</h2>
-            <p>اختر اسمك وأدخل رمز الـ PIN الخاص بك للمتابعة:</p>
-            
-            <div class="form-field" style="text-align: right;">
-                <label for="loginUserSelect">اسم فرد العائلة</label>
-                <select id="loginUserSelect">
-                    <option value="الوالد التجاني">الوالد التجاني</option>
-                    <option value="الوالدة تهاني">الوالدة تهاني</option>
-                    <option value="أحمد">أحمد</option>
-                    <option value="السر">السر</option>
-                    <option value="أسامة">أسامة</option>
-                    <option value="محمد">محمد</option>
-                </select>
-            </div>
+const MEMBER_EMAILS = {
+    "أحمد": "ahmed@family.com",
+    "السر": "elssier@family.com",
+    "أسامة": "osama@family.com",
+    "محمد": "mohamed@family.com"
+};
 
-            <div class="form-field" style="text-align: right;">
-                <label for="loginPinInput">رمز المرور (PIN)</label>
-                <input type="password" id="loginPinInput" placeholder="أدخل رمز الـ PIN..." maxlength="8">
-            </div>
+const MEMBER_AVATARS = {
+    "أحمد": "💻",
+    "السر": "🚀",
+    "أسامة": "⚡",
+    "محمد": "🎯"
+};
 
-            <button type="button" class="primary-btn" onclick="handleLogin()">دخول للمنصة 🚀</button>
-            <p id="authErrorMsg" style="color: #e66a6a; font-size: 11px; margin-top: 10px;"></p>
-        </div>
-    </div>
+let tasks = [];
+let familyScores = {
+    "أحمد": 0,
+    "السر": 0,
+    "أسامة": 0,
+    "محمد": 0
+};
+let currentFilter = "all";
+let currentLoggedInUser = null;
 
-    <div class="app-container">
+document.addEventListener("DOMContentLoaded", () => {
+    initializeTheme();
+    initializeEvents();
 
-        <header class="topbar">
-            <a href="#" class="brand">
-                <div class="brand-icon">⌂</div>
-                <div>
-                    <strong>عائلتنا</strong>
-                    <span id="currentLoggedUserDisplay">المنصة الذكية (سحابي)</span>
-                </div>
-            </a>
-
-            <div style="display: flex; gap: 10px; align-items: center;">
-                <button id="logoutBtn" class="theme-btn" type="button" onclick="handleLogout()" style="background: #ffecec; color: #c0392b; border-color: #f5b7b1;">خروج 🚪</button>
-                <button id="themeToggle" class="theme-btn" type="button" aria-label="تغيير المظهر">
-                    <span id="themeIcon">🌙</span>
-                    <span id="themeLabel">الوضع الليلي</span>
-                </button>
-            </div>
-        </header>
-
-        <main>
-            <section class="welcome-section">
-                <div>
-                    <span class="eyebrow">CLOUD FAMILY HUB</span>
-                    <h1>أهلاً بعائلتنا <span>👋</span></h1>
-                    <p>مزامنة حية للطلبات والمهام عبر السحابة لجميع الأجهزة.</p>
-                </div>
-                <div class="welcome-decoration">☁️</div>
-            </section>
-
-            <section class="quote-card">
-                <div class="quote-icon">✨</div>
-                <div>
-                    <strong>دعاء العائلة</strong>
-                    <p>اللهم احفظ الوالد التجاني والوالدة تهاني وبارك في عائلتنا واجعل بيتنا عامراً بالخير والرضا.</p>
-                </div>
-            </section>
-
-            <section class="stats-grid">
-                <article class="stat-card">
-                    <div class="stat-icon purple">📋</div>
-                    <span>إجمالي المهام</span>
-                    <strong id="totalTasks">0</strong>
-                    <small>جميع الطلبات المسجلة</small>
-                </article>
-
-                <article class="stat-card">
-                    <div class="stat-icon green">✓</div>
-                    <span>المهام المكتملة</span>
-                    <strong id="completedTasks">0</strong>
-                    <small>تم إنجازها بنجاح</small>
-                </article>
-
-                <article class="stat-card">
-                    <div class="stat-icon orange">⏳</div>
-                    <span>المهام المتبقية</span>
-                    <strong id="remainingTasks">0</strong>
-                    <small>بانتظار الإنجاز</small>
-                </article>
-
-                <article class="stat-card">
-                    <div class="stat-icon blue">⭐</div>
-                    <span>مجموع النقاط</span>
-                    <strong id="totalPoints">0</strong>
-                    <small>إنجازات العائلة</small>
-                </article>
-            </section>
-
-            <section class="content-grid">
-
-                <div class="main-column">
-
-                    <section class="panel progress-panel">
-                        <div class="section-heading">
-                            <div>
-                                <span class="eyebrow">YOUR PROGRESS</span>
-                                <h2>إنجازات العائلة</h2>
-                            </div>
-                            <span id="progressText" class="progress-percent">0%</span>
-                        </div>
-
-                        <div class="progress-track">
-                            <div id="progressBar" class="progress-fill"></div>
-                        </div>
-
-                        <p id="progressMessage" class="muted-text">لنبدأ بإنجاز مهامنا اليوم!</p>
-                    </section>
-
-                    <section class="panel">
-                        <div class="section-heading">
-                            <div>
-                                <span class="eyebrow">TASK MANAGEMENT</span>
-                                <h2>إضافة طلب أو تذكير</h2>
-                            </div>
-                            <span class="heading-icon">📝</span>
-                        </div>
-
-                        <form id="taskForm">
-                            <div class="form-field">
-                                <label for="taskInput">اسم المهمة</label>
-                                <input
-                                    type="text"
-                                    id="taskInput"
-                                    maxlength="120"
-                                    placeholder="مثلاً: شراء الأرز والحليب..."
-                                    required
-                                >
-                            </div>
-
-                            <div class="form-row">
-                                <div class="form-field">
-                                    <label for="categorySelect">التصنيف</label>
-                                    <select id="categorySelect">
-                                        <option value="🛒 طلبات المقاضي">🛒 طلبات المقاضي</option>
-                                        <option value="🍲 وجبات الطعام">🍲 وجبات الطعام</option>
-                                        <option value="💊 مواعيد وأدوية">💊 مواعيد وأدوية</option>
-                                        <option value="⚡ فواتير ومصاريف">⚡ فواتير ومصاريف</option>
-                                        <option value="🏠 مهام المنزل">🏠 مهام المنزل</option>
-                                        <option value="📌 أخرى">📌 أخرى</option>
-                                    </select>
-                                </div>
-
-                                <div class="form-field">
-                                    <label for="userSelect">المسؤول عن المهمة</label>
-                                    <select id="userSelect">
-                                        <option value="الوالد التجاني">الوالد التجاني</option>
-                                        <option value="الوالدة تهاني">الوالدة تهاني</option>
-                                        <option value="أحمد">أحمد</option>
-                                        <option value="السر">السر</option>
-                                        <option value="أسامة">أسامة</option>
-                                        <option value="محمد">محمد</option>
-                                        <option value="العائلة">جميع العائلة</option>
-                                    </select>
-                                </div>
-                            </div>
-
-                            <button type="submit" class="primary-btn">
-                                <span>＋</span> إضافة المهمة للسحابة
-                            </button>
-                        </form>
-                    </section>
-
-                    <section class="panel tasks-panel">
-                        <div class="section-heading">
-                            <div>
-                                <span class="eyebrow">YOUR TASKS</span>
-                                <h2>قائمة المهام السحابية</h2>
-                            </div>
-                            <span id="taskCount" class="count-badge">0 مهمة</span>
-                        </div>
-
-                        <div class="filter-row">
-                            <button class="filter-btn active" data-filter="all">الكل</button>
-                            <button class="filter-btn" data-filter="pending">قيد الانتظار</button>
-                            <button class="filter-btn" data-filter="completed">مكتملة</button>
-                        </div>
-
-                        <ul id="taskList" class="task-list"></ul>
-
-                        <div id="emptyState" class="empty-state">
-                            <div>📭</div>
-                            <strong>لا توجد مهام سحابية حالياً</strong>
-                            <p>أضف أول مهمة لتتزامن فوراً مع باقي الأجهزة.</p>
-                        </div>
-                    </section>
-                </div>
-
-                <aside class="side-column">
-                    <section class="panel leaderboard-panel">
-                        <div class="section-heading">
-                            <div>
-                                <span class="eyebrow">FAMILY LEADERS</span>
-                                <h2>متصدرو النقاط</h2>
-                            </div>
-                            <span>🏆</span>
-                        </div>
-
-                        <div id="leaderboard" class="leaderboard-list"></div>
-
-                        <div class="points-note">
-                            ⭐ يتم مزامنة النقاط لحظياً عبر السحابة.
-                        </div>
-                    </section>
-
-                    <section class="motivation-card">
-                        <div class="motivation-icon">☁️</div>
-                        <h3>منصة سحابية متكاملة</h3>
-                        <p>بفضل Firebase، بات بإمكان العائلة متابعة الطلبات من أي جهاز وفي أي وقت.</p>
-                    </section>
-                </aside>
-
-            </section>
-        </main>
-
-        <footer>
-            <span>© 2026 | أحمد (التطوير السحابي)</span>
-        </footer>
-
-    </div>
-
-    <!-- إضافة ستايل إضافي لنافذة تسجيل الدخول -->
-    <style>
-        .auth-modal-overlay {
-            position: fixed; inset: 0; background: rgba(17, 21, 34, 0.85);
-            display: grid; place-items: center; z-index: 9999; backdrop-filter: blur(8px);
+    onAuthStateChanged(auth, (user) => {
+        const modal = document.getElementById("authModal");
+        if (user) {
+            currentLoggedInUser = Object.keys(MEMBER_EMAILS).find(key => MEMBER_EMAILS[key] === user.email) || "أحمد";
+            if (modal) modal.style.display = "none";
+            const userDisplay = document.getElementById("currentLoggedUserDisplay");
+            if (userDisplay) userDisplay.textContent = `مرحباً، ${currentLoggedInUser} 👤`;
+            initCloudSync();
+        } else {
+            if (modal) modal.style.display = "grid";
+            currentLoggedInUser = null;
         }
-        .auth-modal-card {
-            background: var(--surface); padding: 30px; border-radius: 20px;
-            width: min(400px, calc(100% - 32px)); box-shadow: 0 10px 35px rgba(0,0,0,0.3);
-            text-align: center; border: 1px solid var(--border);
+    });
+});
+
+window.handleLogin = async function() {
+    const userSelect = document.getElementById("loginUserSelect");
+    const pinInput = document.getElementById("loginPinInput");
+    const errorMsg = document.getElementById("authErrorMsg");
+
+    if (!userSelect || !pinInput || !errorMsg) return;
+
+    const userSelectValue = userSelect.value;
+    const rawPin = pinInput.value.trim();
+
+    if (!rawPin) {
+        errorMsg.textContent = "الرجاء إدخال رمز الـ PIN الخاص بك.";
+        return;
+    }
+
+    const email = MEMBER_EMAILS[userSelectValue];
+    if (!email) {
+        errorMsg.textContent = "حدث خطأ في تحديد الحساب.";
+        return;
+    }
+
+    try {
+        errorMsg.textContent = "جاري التحقق وتسجيل الدخول...";
+        await signInWithEmailAndPassword(auth, email, rawPin);
+        errorMsg.textContent = "";
+        pinInput.value = "";
+    } catch (error) {
+        console.error(error);
+        errorMsg.textContent = "رمز الـ PIN غير صحيح. تأكد من الرمز وحاول مجدداً.";
+    }
+};
+
+window.handleLogout = function() {
+    signOut(auth).then(() => {
+        location.reload();
+    });
+};
+
+async function initCloudSync() {
+    await migrateLocalDataToCloudIfNeeded();
+
+    onSnapshot(collection(db, "familyTasks"), (snapshot) => {
+        tasks = [];
+        snapshot.forEach((docSnap) => {
+            let data = docSnap.data();
+            tasks.push({
+                id: docSnap.id,
+                text: data.text,
+                category: data.category,
+                user: data.user,
+                completed: data.completed
+            });
+        });
+        renderTasks();
+        updateDashboard();
+    });
+
+    onSnapshot(doc(db, "familyData", "scores"), (docSnap) => {
+        if (docSnap.exists()) {
+            familyScores = docSnap.data();
         }
-        .auth-modal-card h2 { font-size: 19px; margin: 10px 0 5px; color: var(--text); }
-        .auth-modal-card p { font-size: 12px; color: var(--muted); margin-bottom: 20px; }
-    </style>
-</body>
-</html>
+        updateLeaderboard();
+        updateDashboard();
+    });
+}
+
+async function migrateLocalDataToCloudIfNeeded() {
+    try {
+        const localTasks = JSON.parse(localStorage.getItem("familyTasks")) || [];
+        const scoresDocRef = doc(db, "familyData", "scores");
+        const scoresSnap = await getDoc(scoresDocRef);
+
+        if (!scoresSnap.exists() && localStorage.getItem("familyScores")) {
+            const localScores = JSON.parse(localStorage.getItem("familyScores"));
+            await setDoc(scoresDocRef, localScores);
+        }
+
+        if (localTasks.length > 0 && !localStorage.getItem("migratedToCloud")) {
+            for (let t of localTasks) {
+                await addDoc(collection(db, "familyTasks"), {
+                    text: t.text,
+                    category: t.category || "📌 أخرى",
+                    user: t.user || "أحمد",
+                    completed: Boolean(t.completed),
+                    createdAt: Date.now()
+                });
+            }
+            localStorage.setItem("migratedToCloud", "true");
+        }
+    } catch (e) {
+        console.error("خطأ في الترحيل للسحابة:", e);
+    }
+}
+
+function initializeEvents() {
+    const form = document.getElementById("taskForm");
+    if (form) {
+        form.addEventListener("submit", event => {
+            event.preventDefault();
+            addCloudTask();
+        });
+    }
+
+    const themeToggle = document.getElementById("themeToggle");
+    if (themeToggle) {
+        themeToggle.addEventListener("click", toggleDarkMode);
+    }
+
+    document.querySelectorAll(".filter-btn").forEach(button => {
+        button.addEventListener("click", () => {
+            currentFilter = button.dataset.filter;
+            document.querySelectorAll(".filter-btn").forEach(btn => {
+                btn.classList.toggle("active", btn === button);
+            });
+            renderTasks();
+        });
+    });
+
+    const taskList = document.getElementById("taskList");
+    if (taskList) {
+        taskList.addEventListener("change", event => {
+            if (event.target.classList.contains("task-check")) {
+                toggleCloudTask(event.target.dataset.id);
+            }
+        });
+
+        taskList.addEventListener("click", event => {
+            const deleteButton = event.target.closest(".delete-btn");
+            if (deleteButton) {
+                deleteCloudTask(deleteButton.dataset.id);
+            }
+        });
+    }
+}
+
+async function addCloudTask() {
+    const input = document.getElementById("taskInput");
+    const category = document.getElementById("categorySelect").value;
+    const user = document.getElementById("userSelect").value;
+    const text = input.value.trim();
+
+    if (!text) return;
+
+    try {
+        await addDoc(collection(db, "familyTasks"), {
+            text,
+            category,
+            user,
+            completed: false,
+            createdAt: Date.now()
+        });
+        input.value = "";
+        input.focus();
+    } catch (e) {
+        console.error("خطأ في إضافة المهمة:", e);
+    }
+}
+
+async function toggleCloudTask(id) {
+    const task = tasks.find(item => item.id === id);
+    if (!task) return;
+
+    const newCompletedState = !task.completed;
+    const pointsChange = newCompletedState ? 10 : -10;
+
+    try {
+        await updateDoc(doc(db, "familyTasks", id), {
+            completed: newCompletedState
+        });
+
+        familyScores[task.user] = Math.max(0, (familyScores[task.user] || 0) + pointsChange);
+        await setDoc(doc(db, "familyData", "scores"), familyScores);
+
+        if (newCompletedState && typeof confetti === "function") {
+            confetti({ particleCount: 65, spread: 65, origin: { y: 0.7 } });
+        }
+    } catch (e) {
+        console.error("خطأ في تحديث المهمة:", e);
+    }
+}
+
+async function deleteCloudTask(id) {
+    if (!confirm("هل تريد حذف هذه المهمة من السحابة؟")) return;
+
+    try {
+        await deleteDoc(doc(db, "familyTasks", id));
+    } catch (e) {
+        console.error("خطأ في الحذف:", e);
+    }
+}
+
+function renderTasks() {
+    const list = document.getElementById("taskList");
+    const emptyState = document.getElementById("emptyState");
+    if (!list) return;
+
+    list.replaceChildren();
+
+    const filteredTasks = tasks.filter(task => {
+        if (currentFilter === "pending") return !task.completed;
+        if (currentFilter === "completed") return task.completed;
+        return true;
+    });
+
+    if (emptyState) emptyState.hidden = filteredTasks.length > 0;
+    list.hidden = filteredTasks.length === 0;
+
+    filteredTasks.forEach(task => {
+        const item = document.createElement("li");
+        item.className = "task-item";
+        if (task.completed) item.classList.add("completed");
+
+        const checkbox = document.createElement("input");
+        checkbox.type = "checkbox";
+        checkbox.className = "task-check";
+        checkbox.checked = task.completed;
+        checkbox.dataset.id = task.id;
+
+        const info = document.createElement("div");
+        info.className = "task-info";
+
+        const name = document.createElement("span");
+        name.className = "task-name";
+        name.textContent = task.text;
+
+        const meta = document.createElement("div");
+        meta.className = "task-meta";
+
+        const category = document.createElement("span");
+        category.className = "task-tag";
+        category.textContent = task.category;
+
+        const user = document.createElement("span");
+        user.className = "task-tag";
+        user.textContent = (MEMBER_AVATARS[task.user] || "👤") + " " + task.user;
+
+        meta.append(category, user);
+        info.append(name, meta);
+
+        const deleteButton = document.createElement("button");
+        deleteButton.type = "button";
+        deleteButton.className = "delete-btn";
+        deleteButton.textContent = "حذف";
+        deleteButton.dataset.id = task.id;
+
+        item.append(checkbox, info, deleteButton);
+        list.appendChild(item);
+    });
+
+    const taskCount = document.getElementById("taskCount");
+    if (taskCount) taskCount.textContent = filteredTasks.length + " مهمة";
+}
+
+function updateDashboard() {
+    const total = tasks.length;
+    const completed = tasks.filter(task => task.completed).length;
+    const remaining = total - completed;
+    const percentage = total === 0 ? 0 : Math.round((completed / total) * 100);
+
+    const totalPoints = Object.values(familyScores).reduce((sum, pts) => sum + pts, 0);
+
+    const elTotal = document.getElementById("totalTasks");
+    const elCompleted = document.getElementById("completedTasks");
+    const elRemaining = document.getElementById("remainingTasks");
+    const elPoints = document.getElementById("totalPoints");
+    const elProgressText = document.getElementById("progressText");
+    const elProgressBar = document.getElementById("progressBar");
+    const elProgressMsg = document.getElementById("progressMessage");
+
+    if (elTotal) elTotal.textContent = total;
+    if (elCompleted) elCompleted.textContent = completed;
+    if (elRemaining) elRemaining.textContent = remaining;
+    if (elPoints) elPoints.textContent = totalPoints;
+    if (elProgressText) elProgressText.textContent = percentage + "%";
+    if (elProgressBar) elProgressBar.style.width = percentage + "%";
+
+    let message = "لنبدأ بإنجاز المهام اليومية!";
+    if (percentage === 100 && total > 0) message = "رائع! تم إنجاز جميع المهام 🎉";
+    else if (percentage >= 70) message = "إنجاز ممتاز! اقتربتم من النهاية.";
+    else if (percentage >= 30) message = "عمل رائع، استمروا!";
+
+    if (elProgressMsg) elProgressMsg.textContent = message;
+}
+
+function getMemberLevelAndBadge(points) {
+    if (points >= 300) return { level: 4, title: "👑 أسطورة المنصة", badge: "البطل" };
+    if (points >= 150) return { level: 3, title: "🔥 نشيط جداً", badge: "المثابر" };
+    if (points >= 50)  return { level: 2, title: "⭐ في الطريق للمجد", badge: "النشيط" };
+    return { level: 1, title: "🌱 مبتدئ", badge: "مبتدئ" };
+}
+
+function updateLeaderboard() {
+    const leaderboard = document.getElementById("leaderboard");
+    if (!leaderboard) return;
+    
+    leaderboard.replaceChildren();
+
+    const sortedMembers = FAMILY_MEMBERS
+        .map(user => ({ 
+            name: user, 
+            points: familyScores[user] || 0,
+            ...getMemberLevelAndBadge(familyScores[user] || 0)
+        }))
+        .sort((a, b) => b.points - a.points);
+
+    sortedMembers.forEach((member, index) => {
+        const row = document.createElement("div");
+        row.className = "leader-row";
+        row.style.display = "flex";
+        row.style.alignItems = "center";
+        row.style.justifyContent = "space-between";
+        row.style.padding = "10px 14px";
+        row.style.marginBottom = "8px";
+        row.style.background = "rgba(168, 85, 247, 0.08)";
+        row.style.border = "1px solid rgba(168, 85, 247, 0.2)";
+        row.style.borderRadius = "12px";
+
+        const leftSide = document.createElement("div");
+        leftSide.style.display = "flex";
+        leftSide.style.alignItems = "center";
+        leftSide.style.gap = "10px";
+
+        const rank = document.createElement("span");
+        rank.style.fontWeight = "bold";
+        rank.style.fontSize = "1rem";
+        rank.textContent = index === 0 ? "🥇" : index === 1 ? "🥈" : index === 2 ? "🥉" : `#${index + 1}`;
+
+        const avatar = document.createElement("span");
+        avatar.style.fontSize = "1.3rem";
+        avatar.textContent = MEMBER_AVATARS[member.name] || "👤";
+
+        const infoDiv = document.createElement("div");
+        
+        const name = document.createElement("span");
+        name.style.fontWeight = "bold";
+        name.style.display = "block";
+        name.style.fontSize = "0.9rem";
+        name.textContent = member.name;
+
+        const badge = document.createElement("span");
+        badge.style.fontSize = "0.7rem";
+        badge.style.opacity = "0.85";
+        badge.textContent = `${member.title} | ${member.badge}`;
+
+        infoDiv.append(name, badge);
+        leftSide.append(rank, avatar, infoDiv);
+
+        const points = document.createElement("span");
+        points.style.fontWeight = "bold";
+        points.style.fontSize = "0.95rem";
+        points.style.color = "#a855f7";
+        points.textContent = member.points + " ⭐ XP";
+
+        row.append(leftSide, points);
+        leaderboard.appendChild(row);
+    });
+}
+
+function initializeTheme() {
+    const savedTheme = localStorage.getItem("familyTheme");
+    const darkMode = savedTheme === "dark";
+    document.body.classList.toggle("dark-theme", darkMode);
+    updateThemeButton(darkMode);
+}
+
+window.toggleDarkMode = function() {
+    const isDark = document.body.classList.toggle("dark-theme");
+    localStorage.setItem("familyTheme", isDark ? "dark" : "light");
+    updateThemeButton(isDark);
+};
+
+function updateThemeButton(isDark) {
+    const icon = document.getElementById("themeIcon");
+    const label = document.getElementById("themeLabel");
+    if (icon) icon.textContent = isDark ? "☀️" : "🌙";
+    if (label) label.textContent = isDark ? "الوضع النهاري" : "الوضع الليلي";
+}
