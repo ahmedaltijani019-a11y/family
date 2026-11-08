@@ -70,11 +70,12 @@ document.addEventListener("DOMContentLoaded", () => {
         const modal = document.getElementById("authModal");
         if (user) {
             currentLoggedInUser = Object.keys(MEMBER_EMAILS).find(key => MEMBER_EMAILS[key] === user.email) || "أحمد";
-            modal.style.display = "none";
-            document.getElementById("currentLoggedUserDisplay").textContent = `مرحباً، ${currentLoggedInUser} 👤`;
+            if (modal) modal.style.display = "none";
+            const userDisplay = document.getElementById("currentLoggedUserDisplay");
+            if (userDisplay) userDisplay.textContent = `مرحباً، ${currentLoggedInUser} 👤`;
             initCloudSync();
         } else {
-            modal.style.display = "grid";
+            if (modal) modal.style.display = "grid";
             currentLoggedInUser = null;
         }
     });
@@ -119,152 +120,4 @@ async function initCloudSync() {
     onSnapshot(collection(db, "familyTasks"), (snapshot) => {
         tasks = [];
         snapshot.forEach((docSnap) => {
-            let data = docSnap.data();
-            tasks.push({
-                id: docSnap.id,
-                text: data.text,
-                category: data.category,
-                user: data.user,
-                completed: data.completed
-            });
-        });
-        renderTasks();
-        updateDashboard();
-    });
-
-    onSnapshot(doc(db, "familyData", "scores"), (docSnap) => {
-        if (docSnap.exists()) {
-            familyScores = docSnap.data();
-        }
-        updateLeaderboard();
-        updateDashboard();
-    });
-}
-
-async function migrateLocalDataToCloudIfNeeded() {
-    try {
-        const localTasks = JSON.parse(localStorage.getItem("familyTasks")) || [];
-        const scoresDocRef = doc(db, "familyData", "scores");
-        const scoresSnap = await getDoc(scoresDocRef);
-
-        if (!scoresSnap.exists() && localStorage.getItem("familyScores")) {
-            const localScores = JSON.parse(localStorage.getItem("familyScores"));
-            await setDoc(scoresDocRef, localScores);
-        }
-
-        if (localTasks.length > 0 && !localStorage.getItem("migratedToCloud")) {
-            for (let t of localTasks) {
-                await addDoc(collection(db, "familyTasks"), {
-                    text: t.text,
-                    category: t.category || "📌 أخرى",
-                    user: t.user || "العائلة",
-                    completed: Boolean(t.completed),
-                    createdAt: Date.now()
-                });
-            }
-            localStorage.setItem("migratedToCloud", "true");
-        }
-    } catch (e) {
-        console.error("خطأ في الترحيل للسحابة:", e);
-    }
-}
-
-function initializeEvents() {
-    const form = document.getElementById("taskForm");
-
-    form.addEventListener("submit", event => {
-        event.preventDefault();
-        addCloudTask();
-    });
-
-    document.getElementById("themeToggle").addEventListener("click", toggleDarkMode);
-
-    document.querySelectorAll(".filter-btn").forEach(button => {
-        button.addEventListener("click", () => {
-            currentFilter = button.dataset.filter;
-            document.querySelectorAll(".filter-btn").forEach(btn => {
-                btn.classList.toggle("active", btn === button);
-            });
-            renderTasks();
-        });
-    });
-
-    document.getElementById("taskList").addEventListener("change", event => {
-        if (event.target.classList.contains("task-check")) {
-            toggleCloudTask(event.target.dataset.id);
-        }
-    });
-
-    document.getElementById("taskList").addEventListener("click", event => {
-        const deleteButton = event.target.closest(".delete-btn");
-        if (deleteButton) {
-            deleteCloudTask(deleteButton.dataset.id);
-        }
-    });
-}
-
-async function addCloudTask() {
-    const input = document.getElementById("taskInput");
-    const category = document.getElementById("categorySelect").value;
-    const user = document.getElementById("userSelect").value;
-    const text = input.value.trim();
-
-    if (!text) return;
-
-    try {
-        await addDoc(collection(db, "familyTasks"), {
-            text,
-            category,
-            user,
-            completed: false,
-            createdAt: Date.now()
-        });
-        input.value = "";
-        input.focus();
-    } catch (e) {
-        console.error("خطأ في إضافة المهمة:", e);
-    }
-}
-
-async function toggleCloudTask(id) {
-    const task = tasks.find(item => item.id === id);
-    if (!task) return;
-
-    const newCompletedState = !task.completed;
-    const pointsChange = newCompletedState ? 10 : -10;
-
-    try {
-        await updateDoc(doc(db, "familyTasks", id), {
-            completed: newCompletedState
-        });
-
-        familyScores[task.user] = Math.max(0, (familyScores[task.user] || 0) + pointsChange);
-        await setDoc(doc(db, "familyData", "scores"), familyScores);
-
-        if (newCompletedState && typeof confetti === "function") {
-            confetti({ particleCount: 65, spread: 65, origin: { y: 0.7 } });
-        }
-    } catch (e) {
-        console.error("خطأ في تحديث المهمة:", e);
-    }
-}
-
-async function deleteCloudTask(id) {
-    if (!confirm("هل تريد حذف هذه المهمة من السحابة؟")) return;
-
-    try {
-        await deleteDoc(doc(db, "familyTasks", id));
-    } catch (e) {
-        console.error("خطأ في الحذف:", e);
-    }
-}
-
-function renderTasks() {
-    const list = document.getElementById("taskList");
-    const emptyState = document.getElementById("emptyState");
-
-    list.replaceChildren();
-
-    const filteredTasks = tasks.filter(task => {
-        if (currentFilter === "pending") return !task.completed;
-        if (currentFilter === "completed") return task.completed
+            let data = docSnap.data
